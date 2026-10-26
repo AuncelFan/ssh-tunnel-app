@@ -5,6 +5,23 @@
 A desktop SSH tunnel manager built with **Tauri 2 + React + TypeScript + Rust**.
 Version: **0.1.0**.
 
+## Screenshots
+
+English UI with isolated example configurations. All names are fictional; running
+tunnels and traffic use local loopback test services, not real servers or personal data.
+
+### Overview
+
+Tunnel counts, live transfer rates and rolling last-hour traffic at a glance.
+
+![Overview with example tunnel counts and local test traffic](docs/screenshots/overview.png)
+
+### Tunnels
+
+Local, remote and SOCKS5 forwarding with jumper filters, custom groups and group controls.
+
+![Tunnel list with example jumpers, custom groups and L/R/S forwarding modes](docs/screenshots/tunnels.png)
+
 ## Features
 
 - Local (L), remote (R) and dynamic SOCKS5 (S) forwarding through ordered jumper chains.
