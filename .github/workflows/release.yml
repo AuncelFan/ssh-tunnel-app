@@ -1,0 +1,159 @@
+name: Tagged release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/release-assets.mjs validate
+      - run: node --test scripts/release-assets.test.mjs scripts/native-ci-profile.test.mjs
+      - name: Check release notes exist
+        shell: bash
+        run: test -s "releases/${RELEASE_TAG}.md"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: macos-latest
+            platform: macos-universal
+          - os: ubuntu-22.04
+            platform: linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - name: macOS architecture targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - name: Rust checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo test --workspace --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: pnpm test:frontend
+      - name: Windows build and installer
+        if: runner.os == 'Windows'
+        run: pnpm build:windows
+      - name: macOS universal application and disk image
+        if: runner.os == 'macOS'
+        run: pnpm build:macos
+      - name: Verify universal architectures and ad-hoc signature
+        if: runner.os == 'macOS'
+        run: |
+          lipo -verify_arch arm64 x86_64 target/universal-apple-darwin/release/bundle/macos/ssh-tunnel.app/Contents/MacOS/ssh-tunnel
+          codesign --verify --deep --strict target/universal-apple-darwin/release/bundle/macos/ssh-tunnel.app
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: pnpm build:linux
+      - name: Ensure Windows WebView2
+        if: runner.os == 'Windows'
+        run: ./scripts/ensure-webview2.ps1
+      - name: Windows native regression with isolated configurations
+        if: runner.os == 'Windows'
+        run: ./scripts/native-ci-windows.ps1
+      - name: Collect versioned packages and hashes
+        env:
+          RELEASE_PLATFORM: ${{ matrix.platform }}
+        run: node scripts/release-assets.mjs collect "$RELEASE_PLATFORM"
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: target/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Windows test evidence
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence
+          path: |
+            target/native-smoke/**/*.png
+            target/native-smoke/**/failure.json
+            target/native-smoke/**/binary.json
+            target/native-smoke/**/native-startup-*.log
+            target/native-ci/**/result.json
+            target/native-ci/**/worker.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: target/release-assets
+      - name: Verify complete artifact set, version, source commit and hashes
+        run: node scripts/release-assets.mjs verify
+      - name: Create draft, upload all assets, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" target/release-assets/* \
+            --verify-tag --draft --title "ssh-tunnel $RELEASE_TAG" \
+            --notes-file "releases/${RELEASE_TAG}.md"
+          gh release edit "$RELEASE_TAG" --draft=false --latest

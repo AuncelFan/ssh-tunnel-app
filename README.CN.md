@@ -23,8 +23,8 @@
 - Windows：Visual Studio Build Tools 的 C++ 桌面开发组件、Windows SDK、WebView2 Runtime。
 - macOS：Xcode 命令行工具。
 
-CI 配置包含 Windows/macOS 构建与测试。Windows 原生回归使用实际 WebView2 应用；
-macOS 桌面交互，以及系统托盘、选择器、剪贴板交互，尚未被自动化测试完整覆盖。
+tag 发布工作流包含 Windows/macOS/Linux 构建与测试。Windows 原生回归使用实际 WebView2 应用；
+macOS/Linux 桌面交互，以及系统托盘、选择器、剪贴板交互，尚未被自动化测试完整覆盖。
 
 ## 开发运行
 
@@ -77,7 +77,15 @@ pnpm stage:windows
 
 EXE、`SHA256SUMS` 和 `build-info.json` 保存到 `build/bin/0.1.0/`；
 同版本已有不同文件时不会覆盖。EXE 依赖 WebView2，并非已签名的安装包。
-CI 只上传构建产物，不自动发布发行版；macOS 产物是构建验证可执行文件，不是已签名或公证的应用包。
+
+## Tag 发布
+
+仅推送稳定版本 tag（例如 `v0.1.0`）会触发发布工作流，普通代码推送和 PR 不会触发。
+全部平台构建、测试通过后，统一发布 Windows EXE/NSIS、macOS Universal DMG、
+Linux AppImage/DEB，以及校验和和源码提交清单。
+
+Windows 未进行商业代码签名；macOS 仅临时签名，未经过 Apple 公证，系统可能警告或阻止运行。
+版本校验、各平台本机构建指令、tag 冲突及发布保护见 [RELEASING.md](RELEASING.md)。
 
 ## 配置与安全
 

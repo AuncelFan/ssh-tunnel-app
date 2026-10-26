@@ -12,6 +12,10 @@
     "test:native": "cargo build -p ssh-tunnel-core --example host_key_fixture --locked && node frontend/scripts/native-smoke.mjs",
     "test:native:release": "cargo build -p ssh-tunnel-core --example host_key_fixture --locked && node frontend/scripts/native-smoke.mjs --release",
     "test:native:config": "cargo build -p ssh-tunnel-core --example host_key_fixture --locked && node frontend/scripts/native-smoke.mjs --release --implicit-config",
-    "stage:windows": "node scripts/stage-windows-release.mjs"
+    "stage:windows": "node scripts/stage-windows-release.mjs",
+    "build:windows": "node frontend/node_modules/@tauri-apps/cli/tauri.js build --ci --bundles nsis -- --locked",
+    "build:macos": "node frontend/node_modules/@tauri-apps/cli/tauri.js build --ci --target universal-apple-darwin --bundles dmg -- --locked",
+    "build:linux": "node frontend/node_modules/@tauri-apps/cli/tauri.js build --ci --bundles appimage,deb -- --locked",
+    "test:release": "node --test scripts/release-assets.test.mjs scripts/native-ci-profile.test.mjs"
   }
 }

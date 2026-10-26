@@ -16,7 +16,21 @@
     }
   },
   "bundle": {
-    "active": false,
-    "icon": ["../build/appicon.png", "../build/windows/icon.ico"]
+    "active": true,
+    "category": "DeveloperTool",
+    "publisher": "ssh-tunnel",
+    "shortDescription": "Desktop SSH tunnel manager",
+    "icon": ["../build/appicon.png", "../build/windows/icon.ico", "../build/icon.icns"],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "SimpChinese"],
+        "displayLanguageSelector": true
+      }
+    }
   }
 }

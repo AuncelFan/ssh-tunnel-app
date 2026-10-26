@@ -20,9 +20,11 @@ coverage in `frontend/scripts/native-smoke.mjs`. Application icons are in `build
 - `pnpm build:release` then `pnpm test:native:release`
 - `pnpm test:native:config`: implicit configuration lookup in a synthetic home.
 - `pnpm stage:windows`: copy the tested release EXE and checksum from a clean commit.
+- `pnpm test:release`: tag/version and release-asset integrity regression tests.
+- `pnpm build:windows`, `pnpm build:macos`, `pnpm build:linux`: native-platform packages.
 
 Native evidence stays in ignored `target/native-smoke/`. Inspect failure evidence,
-not just compiler output. CI tests/builds Windows and macOS; desktop interactions
+not just compiler output. Tag-triggered CI tests/builds Windows, macOS and Linux; desktop interactions
 must not be claimed verified on a platform merely because it compiles.
 
 ## Coding and Review
@@ -34,8 +36,9 @@ Cover failure paths, cancellation, stale host-key approvals, cleanup, configurat
 isolation and rolling traffic expiration. Use synthetic loopback SSH fixtures.
 
 Use focused conventional commits. Do not revert unrelated user changes, amend commits,
-rewrite history, publish releases or push to a remote unless requested. The initial
-repository cleanup is local-only; GitHub synchronization requires a separate request.
+rewrite history, publish releases or push to a remote unless requested. Publishing
+is triggered only by a stable version tag. Never overwrite an existing published
+tag or Release without explicit approval. See `RELEASING.md` for release gates.
 
 ## Security and Configuration
 

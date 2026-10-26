@@ -29,8 +29,8 @@ Version: **0.1.0**.
   and Microsoft Edge WebView2 Runtime.
 - macOS: Xcode command-line tools.
 
-The CI workflow builds/tests Windows and macOS. Windows native regression uses the
-real WebView2 application. macOS desktop interaction and system tray/picker/clipboard
+The tag-triggered release workflow builds/tests Windows, macOS and Linux. Windows native regression uses the
+real WebView2 application. macOS/Linux desktop interaction and system tray/picker/clipboard
 interactions are not fully covered by these automated tests.
 
 ## Development
@@ -86,9 +86,18 @@ pnpm stage:windows
 
 This preserves the EXE in `build/bin/0.1.0/`, with `SHA256SUMS` and `build-info.json`.
 It refuses to overwrite different bytes already staged for that version. The EXE
-requires WebView2 and is not a signed installer. CI uploads build artifacts but does
-not publish releases. macOS artifacts are build-verification executables, not signed
-or notarized app bundles.
+requires WebView2 and is not a signed installer.
+
+## Tagged Releases
+
+Only pushing a stable version tag (for example `v0.1.0`) triggers the release workflow.
+Ordinary code pushes and pull requests do not start it. All platform builds/tests must
+pass before Windows EXE/NSIS, macOS Universal DMG and Linux AppImage/DEB packages are
+uploaded and published together with checksums and source manifests.
+
+Windows packages are unsigned; macOS packages have an ad-hoc signature and are not
+Apple-notarized. OS security warnings may occur. See [RELEASING.md](RELEASING.md) for
+version validation, native build commands, tag conflicts and publication safeguards.
 
 ## Configuration and Security
 
