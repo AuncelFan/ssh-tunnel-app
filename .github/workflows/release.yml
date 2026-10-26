@@ -88,8 +88,13 @@ jobs:
       - name: Verify universal architectures and ad-hoc signature
         if: runner.os == 'macOS'
         run: |
-          lipo -verify_arch arm64 x86_64 target/universal-apple-darwin/release/bundle/macos/ssh-tunnel.app/Contents/MacOS/ssh-tunnel
-          codesign --verify --deep --strict target/universal-apple-darwin/release/bundle/macos/ssh-tunnel.app
+          set -euo pipefail
+          mountpoint=$(mktemp -d)
+          trap 'hdiutil detach "$mountpoint" || true; rmdir "$mountpoint" || true' EXIT
+          hdiutil attach "target/universal-apple-darwin/release/bundle/dmg/ssh-tunnel_${RELEASE_TAG#v}_universal.dmg" \
+            -readonly -nobrowse -mountpoint "$mountpoint"
+          lipo "$mountpoint/ssh-tunnel.app/Contents/MacOS/ssh-tunnel" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict "$mountpoint/ssh-tunnel.app"
       - name: Linux packages
         if: runner.os == 'Linux'
         env:
