@@ -1,0 +1,22 @@
+[package]
+name = "ssh-tunnel-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+thiserror = "2"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+russh = "0.64.1"
+hmac = "0.13"
+sha1 = "0.11"
+glob = "0.3"
+
+[dev-dependencies]
+rand = "0.10"
+tokio-stream = "0.1"

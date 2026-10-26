@@ -1,0 +1,22 @@
+# Build outputs and dependencies
+/target/
+/src-tauri/target/
+/src-tauri/gen/schemas/
+/build/bin/
+node_modules/
+/frontend/dist/
+/frontend/*.tsbuildinfo
+/frontend/test-results/
+/frontend/playwright-report/
+
+# Local runtime data and secrets
+/config.toml
+/config.root
+/ui.locale
+/config-backup-*
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
