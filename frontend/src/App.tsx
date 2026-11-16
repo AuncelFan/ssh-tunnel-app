@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import packageInfo from '../package.json'
 import { listen } from '@tauri-apps/api/event'
 import { api } from './api'
 import { filters, selectedFilter } from './groups'
@@ -6,12 +7,14 @@ import { HostTrustDialog } from './components/HostTrustDialog'
 import { Modal } from './components/Modal'
 import { JumperEditor, TunnelEditor } from './components/ConnectionEditor'
 import { GroupEditor } from './components/GroupEditor'
+import { GroupClone } from './components/GroupClone'
+import { IconButton } from './components/IconButton'
+import { TunnelActions } from './components/TunnelActions'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ConfigFiles } from './components/ConfigFiles'
 import { SSHConfigImport } from './components/SSHConfigImport'
 import { CommandImport } from './components/CommandImport'
 import { Toggle } from './components/Toggle'
-import { ProbeActions } from './components/ProbeActions'
 import { LogsPage } from './components/LogsPage'
 import { CopyErrorButton } from './components/CopyErrorButton'
 import { TunnelMapping } from './components/TunnelMapping'
@@ -19,7 +22,7 @@ import { duplicateJumper, logTime } from './journal'
 import { newJumper, newTunnel } from './defaults'
 import { bytes, rates, type Rates } from './traffic'
 import { useLocale } from './locale'
-import type { Config, RuntimeEvent, TunnelRuntime, Jumper, Tunnel } from './types'
+import type { Config, Filter, RuntimeEvent, TunnelRuntime, Jumper, Tunnel } from './types'
 
 const active = (status: string) => !['stopped', 'error'].includes(status)
 
@@ -40,6 +43,7 @@ export default function App() {
   const [jumperEditor, setJumperEditor] = useState<Jumper | null>(null)
   const [tunnelEditor, setTunnelEditor] = useState<Tunnel | null>(null)
   const [groupEditor, setGroupEditor] = useState(false)
+  const [groupClone, setGroupClone] = useState<Filter | null>(null)
   const [sshImporter, setSSHImporter] = useState(false)
   const [commandImporter, setCommandImporter] = useState(false)
   const [confirmation, setConfirmation] = useState<{ title: string; message: string; confirm: () => Promise<void> } | null>(null)
@@ -99,11 +103,18 @@ export default function App() {
   const total = runtime.reduce((sum, state) => ({ uploaded: sum.uploaded + state.traffic_last_hour.uploaded, downloaded: sum.downloaded + state.traffic_last_hour.downloaded }), { uploaded: 0, downloaded: 0 })
   const totalSpeed = Object.values(speeds).reduce((sum, speed) => ({ uploaded: sum.uploaded + speed.uploaded, downloaded: sum.downloaded + speed.downloaded }), { uploaded: 0, downloaded: 0 })
   return <div className="shell">
-    <header><strong>SSH-TUNNEL <small>0.1.0</small></strong><div className="page-tabs" role="navigation" aria-label={t("Main navigation")}>{['Overview', 'Tunnels', 'Jumpers', 'Logs', 'Settings'].map(item => <button key={item} aria-current={page === item ? 'page' : undefined} onClick={() => setPage(item)}>{t(item)}</button>)}</div></header>
+    <header><strong>SSH-TUNNEL <small>{packageInfo.version}</small></strong><div className="page-tabs" role="navigation" aria-label={t("Main navigation")}>{['Tunnels', 'Jumpers', 'Logs', 'Overview', 'Settings'].map(item => <button key={item} aria-current={page === item ? 'page' : undefined} onClick={() => setPage(item)}>{t(item)}</button>)}</div></header>
     {!config && !error && <p role="status">{t("Loading configuration...")}</p>}
     {config && page === 'Tunnels' && <><div className="page-toolbar"><h2>{t("Tunnels")}</h2><div className="actions"><button onClick={() => setGroupEditor(true)}>{t("Manage groups")}</button><button onClick={() => setCommandImporter(true)}>{t("Import SSH command")}</button><button className="primary" onClick={() => setTunnelEditor(newTunnel())}>{t("New tunnel")}</button></div></div><main><nav aria-label={t("Tunnel groups")}>{items.map(item => <button key={item.key} aria-pressed={current?.key === item.key} onClick={() => setSelected(item.key)}><span title={item.name}>{item.name}</span><b>{item.tunnels.length}</b></button>)}</nav>
-      <section><div className="list-heading"><h1>{current?.name}</h1><div className="actions"><button disabled={busy || !current?.tunnels.length} onClick={() => { void action(() => batch(current!.tunnels.filter(t => !active(t.status)), true)) }}>{t("Start group")}</button><button disabled={busy || !current?.tunnels.length} onClick={() => { void action(() => batch(current!.tunnels, false)) }}>{t("Stop group")}</button></div></div>
-        {current?.tunnels.map(tunnel => <article key={tunnel.id}><div className="card-main"><strong><mark>{tunnel.mode === 'local' ? 'L' : tunnel.mode === 'remote' ? 'R' : 'S'}</mark> {tunnel.name}<small className={`status status-${tunnel.status}`}>{t(`status.${tunnel.status}`)}</small></strong><TunnelMapping tunnel={tunnel} jumpers={config.jumpers} /></div><div className="actions"><button disabled={busy} onClick={() => { void action(() => active(tunnel.status) ? api.stopTunnel(tunnel.id) : api.startTunnel(tunnel.id)) }}>{t(active(tunnel.status) ? 'Stop' : 'Start')}</button><button onClick={() => setDetails(tunnel.id)} aria-label={`${t("Details")}: ${tunnel.name}`}>{t("Details")}</button></div></article>)}
+      <section><div className="list-heading"><h1>{current?.name}</h1><div className="actions"><IconButton icon="clone" label={t('Clone group')} disabled={busy || !current?.tunnels.length} onClick={() => setGroupClone(current)} /><button disabled={busy || !current?.tunnels.length} onClick={() => { void action(() => batch(current!.tunnels.filter(t => !active(t.status)), true)) }}>{t("Start group")}</button><button disabled={busy || !current?.tunnels.length} onClick={() => { void action(() => batch(current!.tunnels, false)) }}>{t("Stop group")}</button></div></div>
+        {current?.tunnels.map(tunnel => <article className="tunnel-card" key={tunnel.id}><div className="card-main"><strong><mark>{tunnel.mode === 'local' ? 'L' : tunnel.mode === 'remote' ? 'R' : 'S'}</mark> {tunnel.name}<small className={`status status-${tunnel.status}`}>{t(`status.${tunnel.status}`)}</small></strong><TunnelMapping tunnel={tunnel} jumpers={config.jumpers} /></div><TunnelActions tunnel={tunnel} jumpers={config.jumpers} busy={busy} running={active(tunnel.status)}
+          toggle={() => { void action(() => active(tunnel.status) ? api.stopTunnel(tunnel.id) : api.startTunnel(tunnel.id)) }}
+          edit={() => setTunnelEditor(tunnel)}
+          duplicate={() => setTunnelEditor({ ...tunnel, id: 0, group_id: 0, jumper_ids: [...tunnel.jumper_ids], status: 'stopped', last_error: '' })}
+          remove={() => setConfirmation({ title: t('Delete tunnel?'), message: tunnel.name, confirm: async () => { await api.deleteTunnel(tunnel.id); if (details === tunnel.id) setDetails(null); await refresh() } })}
+          details={() => setDetails(tunnel.id)}
+          autoStart={enabled => { void action(() => api.setTunnelAutoStart(tunnel.id, enabled)) }}
+        /></article>)}
         {!current?.tunnels.length && <div className="empty-state">{t("No tunnels in this group.")}</div>}
       </section></main></>}
     {config && page === 'Overview' && <div className="page-content"><h1>{t("Overview")}</h1><div className="summary-grid"><div><span>{t("Total tunnels")}</span><strong>{config.tunnels.length}</strong></div><div><span>{t("Auto-start")}</span><strong>{config.tunnels.filter(t => t.auto_start).length}</strong></div><div><span>{t("Running")}</span><strong>{config.tunnels.filter(t => t.status === 'running').length}</strong></div></div><section className="panel"><h2>{t("Total traffic")}</h2>{config?.traffic_monitor_enabled ? <div className="traffic-grid"><div><span>{t("Upload")}</span><strong>{bytes(totalSpeed.uploaded)}/s</strong><small>{t("Last hour")}: {bytes(total.uploaded)}</small></div><div><span>{t("Download")}</span><strong>{bytes(totalSpeed.downloaded)}/s</strong><small>{t("Last hour")}: {bytes(total.downloaded)}</small></div></div> : <p className="notice">{t("Traffic monitoring is disabled.")}</p>}</section></div>}
@@ -117,8 +128,6 @@ export default function App() {
       <Toggle label={t("Show default jumper groups")} checked={showJumpers} onChange={value => { localStorage.setItem('ssh-tunnel.tunnel-groups.show-jumper-groups', value ? '1' : '0'); setShowJumpers(value); setSelected('all') }} /><p className="notice">{t("Default groups follow the first jumper. Custom groups remain available.")}</p></section><ConfigFiles onImported={async () => { setSelected('all'); setDetails(null); setLogs([]); sample.current = { time: 0, values: [] }; await refresh() }} /></div>}
     {detail && <Modal title={detail.name} closeLabel={t("Close details")} closeOnBackdrop onClose={() => setDetails(null)}>
       <p>{detail.description || t('No description')}</p>
-      <ProbeActions jumpers={detail.jumper_ids.map(id => config?.jumpers.find(jumper => jumper.id === id)).filter((jumper): jumper is Jumper => !!jumper)} tunnel={detail} disabled={active(detail.status)} />
-      <div className="detail-actions actions"><button disabled={active(detail.status)} onClick={() => { setTunnelEditor(detail); setDetails(null) }}>{t("Edit tunnel")}</button><button onClick={() => { setTunnelEditor({ ...detail, id: 0, name: `${detail.name} ${t("Copy suffix")}`, status: 'stopped', last_error: '' }); setDetails(null) }}>{t("Duplicate")}</button><button className="danger" onClick={() => setConfirmation({ title: t('Delete tunnel?'), message: detail.name, confirm: async () => { await api.deleteTunnel(detail.id); setDetails(null); await refresh() } })}>{t("Delete")}</button></div>
       <dl className="detail-properties"><dt>{t("Type")}</dt><dd>{t(`mode.${detail.mode}`)}</dd><dt>{t("Local endpoint")}</dt><dd>{detail.local_host}:{detail.local_port}</dd><dt>{t("Remote endpoint")}</dt><dd>{detail.mode === 'dynamic' ? 'SOCKS5' : `${detail.remote_host}:${detail.remote_port}`}</dd><dt>{t("Jumper chain")}</dt><dd>{detail.jumper_ids.map(id => config?.jumpers.find(j => j.id === id)?.name ?? `#${id}`).join(' > ')}</dd><dt>{t("Reconnect policy")}</dt><dd>{t(`policy.${detail.reconnect_mode || "legacy"}`)}</dd></dl>
       {config?.traffic_monitor_enabled ? <div className="traffic-grid"><div><span>{t("Upload")}</span><strong>{bytes(speeds[detail.id]?.uploaded ?? 0)}/s</strong><small>{t("Last hour")}: {bytes(traffic?.uploaded ?? 0)}</small></div><div><span>{t("Download")}</span><strong>{bytes(speeds[detail.id]?.downloaded ?? 0)}/s</strong><small>{t("Last hour")}: {bytes(traffic?.downloaded ?? 0)}</small></div></div> : <p className="notice">{t("Traffic monitoring is disabled.")}</p>}
       {detail.last_error && <><p className="error-detail">{detail.last_error}</p><CopyErrorButton text={detail.last_error} /></>}
@@ -129,6 +138,7 @@ export default function App() {
     {sshImporter && config && <SSHConfigImport saveMany={async jumpers => { const result = await api.importJumpers(jumpers); await refresh(); return result }} jumpers={config.jumpers} close={() => setSSHImporter(false)} save={async jumper => { await api.saveJumper(jumper); await refresh() }} />}
     {tunnelEditor && config && <TunnelEditor createJumper={async jumper => { const id = await api.saveJumper(jumper); await refresh(); return id }} initial={tunnelEditor} jumpers={config.jumpers} close={() => setTunnelEditor(null)} save={async value => { await api.saveTunnel(value); await refresh() }} />}
     {groupEditor && config && <GroupEditor reorder={async ids => { await api.reorderGroups(ids); await refresh() }} groups={config.groups} tunnels={config.tunnels} save={async group => { await api.saveGroup(group); await refresh() }} remove={async id => { await api.deleteGroup(id); await refresh(); setSelected('all') }} close={() => setGroupEditor(false)} />}
+    {groupClone && config && <GroupClone source={groupClone} jumpers={config.jumpers} close={() => setGroupClone(null)} save={async request => { const group = await api.cloneGroup(request); await refresh(); setSelected(`custom-${group.id}`) }} />}
     {confirmation && <ConfirmDialog {...confirmation} close={() => setConfirmation(null)} />}
     {pending[0] && <HostTrustDialog key={`${pending[0].tunnel_id}-${pending[0].generation}`} event={pending[0]} onError={setError} respond={async (event, accept) => { await api.resolveHostKey(event.tunnel_id, event.generation, accept); await refresh() }} />}
     {error && <aside className="toast" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label={t("Dismiss error")}>{'\u00d7'}</button></aside>}

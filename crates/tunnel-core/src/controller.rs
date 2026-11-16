@@ -507,6 +507,30 @@ impl Controller {
             .save_tunnel(tunnel)
             .map_err(|error| error.to_string())
     }
+    pub async fn set_tunnel_auto_start(
+        &self,
+        request: crate::repository::TunnelAutoStart,
+    ) -> Result<(), String> {
+        let _guard = self.operations.lock().await;
+        self.repository
+            .lock()
+            .expect("Configuration lock poisoned")
+            .set_tunnel_auto_start(request)
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn clone_group(
+        &self,
+        request: crate::repository::GroupClone,
+    ) -> Result<Group, String> {
+        let _guard = self.operations.lock().await;
+        self.repository
+            .lock()
+            .expect("Configuration lock poisoned")
+            .clone_group(request)
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn delete_tunnel(&self, id: u64) -> Result<(), String> {
         let _guard = self.operations.lock().await;
         self.runtime.stop(id).await;

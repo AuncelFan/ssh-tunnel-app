@@ -28,6 +28,19 @@ pub struct TunnelBatchImport {
     pub created_jumpers: Vec<u64>,
 }
 
+#[derive(serde::Deserialize)]
+pub struct TunnelAutoStart {
+    pub id: u64,
+    pub enabled: bool,
+}
+
+#[derive(serde::Deserialize)]
+pub struct GroupClone {
+    pub name: String,
+    pub tunnel_ids: Vec<u64>,
+    pub target_jumper_id: u64,
+}
+
 impl Repository {
     pub(crate) fn from_committed_config(path: std::path::PathBuf, mut config: Config) -> Self {
         config.normalize_loaded();
@@ -182,6 +195,86 @@ impl Repository {
                 *old = tunnel.clone();
             }
             Ok(tunnel.id)
+        })
+    }
+
+    pub fn set_tunnel_auto_start(&mut self, request: TunnelAutoStart) -> Result<(), StorageError> {
+        self.transaction(|config| {
+            let tunnel = config
+                .tunnels
+                .iter_mut()
+                .find(|tunnel| tunnel.id == request.id)
+                .ok_or("Tunnel not found")?;
+            tunnel.auto_start = request.enabled;
+            Ok(())
+        })
+    }
+
+    /// Creates the group and its stopped tunnels in a single configuration write.
+    pub fn clone_group(&mut self, request: GroupClone) -> Result<Group, StorageError> {
+        self.transaction(|config| {
+            let unique: std::collections::HashSet<_> = request.tunnel_ids.iter().copied().collect();
+            if unique.is_empty() || unique.len() > 2000 || unique.len() != request.tunnel_ids.len()
+            {
+                return Err("Select between 1 and 2000 distinct tunnels".into());
+            }
+            if !config
+                .jumpers
+                .iter()
+                .any(|jumper| jumper.id == request.target_jumper_id)
+            {
+                return Err("Selected jumper no longer exists".into());
+            }
+            let sources = request
+                .tunnel_ids
+                .iter()
+                .map(|id| {
+                    config
+                        .tunnels
+                        .iter()
+                        .find(|tunnel| tunnel.id == *id)
+                        .cloned()
+                        .ok_or_else(|| "A source tunnel no longer exists".to_string())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if sources
+                .iter()
+                .all(|tunnel| tunnel.jumper_ids.first() == Some(&request.target_jumper_id))
+            {
+                return Err("Select a different target jumper".into());
+            }
+            let mut group = Group {
+                id: next_id(config.groups.iter().map(|group| group.id))?,
+                name: request.name.trim().into(),
+                tunnel_ids: Vec::with_capacity(sources.len()),
+            };
+            for mut tunnel in sources {
+                let first = tunnel
+                    .jumper_ids
+                    .first_mut()
+                    .ok_or("Source tunnel has no jumper")?;
+                *first = request.target_jumper_id;
+                if tunnel
+                    .jumper_ids
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != tunnel.jumper_ids.len()
+                {
+                    return Err("Target jumper already occurs later in a source chain".into());
+                }
+                tunnel.id = next_id(config.tunnels.iter().map(|tunnel| tunnel.id))?;
+                tunnel.group_id = 0;
+                tunnel.status = "stopped".into();
+                tunnel.last_error.clear();
+                // Identical local listeners must not compete on the next application launch.
+                tunnel.auto_start = false;
+                group.tunnel_ids.push(tunnel.id);
+                config.tunnels.push(tunnel);
+            }
+            config.groups.push(group.clone());
+            Ok(group)
         })
     }
 
@@ -630,5 +723,163 @@ mod tests {
         std::fs::create_dir(&path).unwrap();
         assert!(repo.delete_tunnel(1).is_err());
         assert_eq!(repo.snapshot().tunnels.len(), 1);
+    }
+
+    #[test]
+    fn clone_group_preserves_mappings_and_names_replaces_only_first_hop_and_survives_reload() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut repo = populated(&path);
+        let jumper = repo.snapshot().jumpers[0].clone();
+        for name in ["target", "later hop"] {
+            repo.save_jumper(Jumper {
+                id: 0,
+                name: name.into(),
+                ..jumper.clone()
+            })
+            .unwrap();
+        }
+        for mode in ["local", "remote", "dynamic"] {
+            repo.save_tunnel(Tunnel {
+                name: "Same name".into(),
+                mode: mode.into(),
+                jumper_ids: vec![1, 3],
+                local_port: 9080,
+                remote_port: 80,
+                auto_start: true,
+                description: "Preserve description".into(),
+                reconnect_mode: "exponential".into(),
+                reconnect_interval_seconds: 7,
+                reconnect_max_attempts: 4,
+                ..Default::default()
+            })
+            .unwrap();
+        }
+        repo.save_group(Group {
+            name: "Original".into(),
+            tunnel_ids: vec![2, 3, 4],
+            ..Default::default()
+        })
+        .unwrap();
+        let original = repo.snapshot();
+        let group = repo
+            .clone_group(GroupClone {
+                name: " Target machine ".into(),
+                tunnel_ids: vec![2, 3, 4],
+                target_jumper_id: 2,
+            })
+            .unwrap();
+        assert_eq!(group.name, "Target machine");
+        assert_eq!(group.tunnel_ids, vec![5, 6, 7]);
+        let reloaded = Repository::open(Storage::new(&path)).unwrap().snapshot();
+        assert_eq!(&reloaded.tunnels[..4], &original.tunnels);
+        assert!(reloaded.jumpers == original.jumpers);
+        assert_eq!(reloaded.trusted_hosts.len(), original.trusted_hosts.len());
+        assert_eq!(reloaded.groups[0], original.groups[0]);
+        assert_eq!(reloaded.groups[1], group);
+        for (source, cloned) in original.tunnels[1..].iter().zip(&reloaded.tunnels[4..]) {
+            let mut expected = source.clone();
+            expected.id = cloned.id;
+            expected.jumper_ids = vec![2, 3];
+            expected.auto_start = false;
+            assert_eq!(*cloned, expected);
+        }
+    }
+
+    #[test]
+    fn group_clone_rejects_stale_sources_duplicate_hops_and_invalid_requests_atomically() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut repo = populated(&path);
+        let jumper = repo.snapshot().jumpers[0].clone();
+        repo.save_jumper(Jumper {
+            id: 0,
+            name: "Target".into(),
+            ..jumper
+        })
+        .unwrap();
+        repo.save_tunnel(Tunnel {
+            name: "Chained".into(),
+            jumper_ids: vec![1, 2],
+            local_port: 8081,
+            remote_port: 80,
+            ..Default::default()
+        })
+        .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        for (name, tunnel_ids, target_jumper_id) in [
+            ("Clone", vec![], 2),
+            ("Clone", vec![1, 1], 2),
+            ("Clone", vec![1, 999], 2),
+            ("Clone", vec![1], 999),
+            ("Clone", vec![1], 1),
+            (" ", vec![1], 2),
+            ("Clone", vec![1, 2], 2),
+        ] {
+            assert!(
+                repo.clone_group(GroupClone {
+                    name: name.into(),
+                    tunnel_ids,
+                    target_jumper_id
+                })
+                .is_err()
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            assert_eq!(repo.snapshot().tunnels.len(), 2);
+            assert!(repo.snapshot().groups.is_empty());
+        }
+        std::fs::rename(&path, dir.path().join("saved.toml")).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(
+            repo.clone_group(GroupClone {
+                name: "Clone".into(),
+                tunnel_ids: vec![1],
+                target_jumper_id: 2
+            })
+            .is_err()
+        );
+        assert_eq!(repo.snapshot().tunnels.len(), 2);
+        assert!(repo.snapshot().groups.is_empty());
+    }
+
+    #[test]
+    fn auto_start_updates_only_the_preference_and_failed_writes_preserve_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut repo = populated(&path);
+        let original = repo.snapshot().tunnels[0].clone();
+        repo.set_tunnel_auto_start(TunnelAutoStart {
+            id: 1,
+            enabled: true,
+        })
+        .unwrap();
+        let mut expected = original.clone();
+        expected.auto_start = true;
+        assert_eq!(
+            Repository::open(Storage::new(&path))
+                .unwrap()
+                .snapshot()
+                .tunnels[0],
+            expected
+        );
+        let before = std::fs::read(&path).unwrap();
+        assert!(
+            repo.set_tunnel_auto_start(TunnelAutoStart {
+                id: 999,
+                enabled: false
+            })
+            .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        std::fs::rename(&path, dir.path().join("saved.toml")).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(
+            repo.set_tunnel_auto_start(TunnelAutoStart {
+                id: 1,
+                enabled: false
+            })
+            .is_err()
+        );
+        assert_eq!(repo.snapshot().tunnels[0], expected);
     }
 }

@@ -1,12 +1,13 @@
 {
   "name": "ssh-tunnel-workspace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "node frontend/node_modules/@tauri-apps/cli/tauri.js dev",
     "build": "node frontend/node_modules/@tauri-apps/cli/tauri.js build",
     "build:release": "node frontend/node_modules/@tauri-apps/cli/tauri.js build --ci --no-bundle -- --locked",
     "test:frontend": "pnpm --dir frontend test",
+    "test:layout:windows": "node frontend/scripts/tunnel-list-layout.mjs",
     "test:rust": "cargo test --workspace --locked",
     "check:desktop": "cargo check -p ssh-tunnel",
     "test:native": "cargo build -p ssh-tunnel-core --example host_key_fixture --locked && node frontend/scripts/native-smoke.mjs",

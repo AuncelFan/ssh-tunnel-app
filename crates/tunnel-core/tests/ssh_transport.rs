@@ -1439,6 +1439,86 @@ async fn startup_launches_only_marked_tunnels_and_shutdown_releases_listeners() 
 }
 
 #[tokio::test]
+async fn changing_auto_start_and_cloning_do_not_interrupt_a_running_tunnel() {
+    use ssh_tunnel_core::{
+        controller::Controller,
+        model::Tunnel,
+        repository::{GroupClone, TunnelAutoStart},
+        storage::Storage,
+    };
+    let fixture = server().await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    let known_hosts = dir.path().join("known_hosts");
+    std::fs::write(
+        &known_hosts,
+        format!(
+            "[127.0.0.1]:{} {}\n",
+            fixture.address.port(),
+            fixture.key.public_key().to_openssh().unwrap()
+        ),
+    )
+    .unwrap();
+    let controller = Controller::open(path.clone(), known_hosts).unwrap();
+    let jumper = controller
+        .save_jumper(hop(&fixture, 0).jumper)
+        .await
+        .unwrap();
+    let target = controller
+        .save_jumper(hop(&fixture, 0).jumper)
+        .await
+        .unwrap();
+    let port = unused_port().await;
+    let id = controller
+        .save_tunnel(Tunnel {
+            name: "Original".into(),
+            jumper_ids: vec![jumper],
+            local_port: port,
+            remote_port: 80,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let mut events = controller.subscribe();
+    controller.start(id).await.unwrap();
+    await_runtime_status(&mut events, "running").await;
+    let generation = controller.runtime_state()[0].generation;
+    for enabled in [true, false, true] {
+        controller
+            .set_tunnel_auto_start(TunnelAutoStart { id, enabled })
+            .await
+            .unwrap();
+        assert_eq!(controller.snapshot().tunnels[0].auto_start, enabled);
+        assert_eq!(
+            Storage::new(&path).load().unwrap().tunnels[0].auto_start,
+            enabled
+        );
+        assert_eq!(controller.snapshot().tunnels[0].status, "running");
+        assert_eq!(controller.runtime_state()[0].generation, generation);
+        assert!(TcpListener::bind(("127.0.0.1", port)).await.is_err());
+    }
+    let cloned = controller
+        .clone_group(GroupClone {
+            name: "Clone".into(),
+            tunnel_ids: vec![id],
+            target_jumper_id: target,
+        })
+        .await
+        .unwrap();
+    let snapshot = controller.snapshot();
+    assert_eq!(snapshot.groups[0], cloned);
+    assert_eq!(snapshot.tunnels[0].status, "running");
+    assert_eq!(snapshot.tunnels[1].status, "stopped");
+    assert_eq!(snapshot.tunnels[1].name, "Original");
+    assert!(!snapshot.tunnels[1].auto_start);
+    assert_eq!(controller.runtime_state().len(), 1);
+    assert_eq!(controller.runtime_state()[0].generation, generation);
+    controller.stop_all().await;
+    assert!(TcpListener::bind(("127.0.0.1", port)).await.is_ok());
+    fixture.assert_no_sessions().await;
+}
+
+#[tokio::test]
 async fn controller_cancelled_trust_does_not_persist_and_revocation_blocks_approval() {
     use ssh_tunnel_core::{controller::Controller, model::Tunnel};
     let fixture = server().await;

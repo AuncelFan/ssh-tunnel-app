@@ -11,6 +11,7 @@ export interface SSHConfigPreview { candidates: SSHConfigCandidate[]; warnings: 
 export interface BatchImport { imported: number[]; skipped: number }
 export interface CommandPreview { jumpers: Jumper[]; tunnels: Tunnel[]; warnings: string[] }
 export interface TunnelBatchImport extends BatchImport { created_jumpers: number[] }
+export interface GroupClone { name: string; tunnel_ids: number[]; target_jumper_id: number }
 
 // No production mock fallback: unavailable native bindings must be visible.
 export const api = {
@@ -45,6 +46,8 @@ export const api = {
   importJumpers: (jumpers: Jumper[]) => invoke<BatchImport>('import_jumpers', { jumpers }),
   deleteJumper: (id: number) => invoke<void>('delete_jumper', { id }),
   saveTunnel: (tunnel: Tunnel) => invoke<number>('save_tunnel', { tunnel }),
+  setTunnelAutoStart: (id: number, enabled: boolean) => invoke<void>('set_tunnel_auto_start', { request: { id, enabled } }),
+  cloneGroup: (request: GroupClone) => invoke<Group>('clone_group', { request }),
   deleteTunnel: (id: number) => invoke<void>('delete_tunnel', { id }),
   saveGroup: (group: Group) => invoke<number>('save_group', { group }),
   deleteGroup: (id: number) => invoke<void>('delete_group', { id }),

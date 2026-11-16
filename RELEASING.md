@@ -16,8 +16,8 @@ are stable `vMAJOR.MINOR.PATCH` versions; invalid tags fail before building.
 4. Push the intended source to `main`, then create and push the annotated version tag:
 
 ```powershell
-git tag -a v0.1.0 -m "ssh-tunnel v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "ssh-tunnel v0.1.1"
+git push origin v0.1.1
 ```
 
 Never move a published tag to fix a failed build. Prefer a new version. If an upload

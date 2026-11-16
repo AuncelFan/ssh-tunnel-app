@@ -3,6 +3,10 @@ import { api } from './api'
 
 export type Locale = 'en' | 'zh-CN'
 export const zh: Record<string, string> = {
+  'Tunnel actions': '隧道操作', 'Duplicate tunnel': '复制隧道',
+  'Clone group': '克隆整组', 'Close group clone': '关闭整组克隆', 'Target jumper': '目标跳板机',
+  'Replace the first jumper in every tunnel. Other hops, names and port mappings are preserved. Clones are stopped with auto-start off to avoid listener conflicts.': '替换每条隧道的首个跳板机，保留后续跳板链、原名和端口映射。新隧道保持停止并关闭自动启动，避免监听端口冲突。',
+  'Add another jumper that does not already occur later in these chains.': '请先添加另一台跳板机，且不能与后续跳板链中的机器重复。',
   'Last hour': '近 1 小时',
   'Logs': '日志', 'Log level': '日志级别', 'Activity log': '活动日志', 'Info': '信息', 'Warnings': '警告', 'Errors': '错误', 'Application': '应用', 'Tunnel': '隧道',
   'No log entries.': '暂无日志。', 'The latest 500 events are kept in memory. Switching configuration clears this history.': '最近 500 条事件保存在内存中，切换配置后清空。',

@@ -3,7 +3,7 @@
 [简体中文](README.CN.md)
 
 A desktop SSH tunnel manager built with **Tauri 2 + React + TypeScript + Rust**.
-Version: **0.1.0**.
+Version: **0.1.1**.
 
 ## Screenshots
 
@@ -31,7 +31,11 @@ Local, remote and SOCKS5 forwarding with jumper filters, custom groups and group
   fixed intervals and exponential backoff. Stop cancels pending reconnects.
 - All/default-jumper/custom group filters, overlapping membership, group ordering
   and one-click group start/stop.
-- Compact tunnel rows with jumper names, detailed settings and per-tunnel logs.
+- Tunnel rows expose start/stop, test, diagnose, edit, duplicate, delete and details
+  as icons with hover labels, plus an auto-start switch. Duplicates keep the original name.
+- Clone an entire group from its header, choosing a target jumper and a new group name.
+  Only the first hop changes; subsequent hops and port mappings are preserved.
+  Clones are stopped with auto-start off to avoid competing listeners.
 - Live rates and rolling last-hour traffic volumes in details and the overview.
   History uses one-second buckets, survives tunnel restarts and expires while idle.
   It is in-memory and resets on application exit or configuration replacement.
@@ -101,13 +105,13 @@ from a clean committed tree, run:
 pnpm stage:windows
 ```
 
-This preserves the EXE in `build/bin/0.1.0/`, with `SHA256SUMS` and `build-info.json`.
+This preserves the EXE in `build/bin/0.1.1/`, with `SHA256SUMS` and `build-info.json`.
 It refuses to overwrite different bytes already staged for that version. The EXE
 requires WebView2 and is not a signed installer.
 
 ## Tagged Releases
 
-Only pushing a stable version tag (for example `v0.1.0`) triggers the release workflow.
+Only pushing a stable version tag (for example `v0.1.1`) triggers the release workflow.
 Ordinary code pushes and pull requests do not start it. All platform builds/tests must
 pass before Windows EXE/NSIS, macOS Universal DMG and Linux AppImage/DEB packages are
 uploaded and published together with checksums and source manifests.

@@ -2,7 +2,7 @@
 
 ## Structure
 
-This repository contains only ssh-tunnel 0.1.0, built with Tauri 2, React,
+This repository contains only ssh-tunnel 0.1.1, built with Tauri 2, React,
 TypeScript and Rust. Native commands and desktop lifecycle live in `src-tauri/`;
 SSH, forwarding, configuration, imports and diagnostics live in `crates/tunnel-core/`.
 The UI and component tests are in `frontend/src/`, with native WebView2 regression

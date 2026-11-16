@@ -69,6 +69,8 @@ fn parse_ssh_command(
 mutation!(import_jumpers, jumpers: Vec<Jumper>, ssh_tunnel_core::repository::BatchImport);
 mutation!(delete_jumper, id: u64, ());
 mutation!(save_tunnel, tunnel: Tunnel, u64);
+mutation!(set_tunnel_auto_start, request: ssh_tunnel_core::repository::TunnelAutoStart, ());
+mutation!(clone_group, request: ssh_tunnel_core::repository::GroupClone, Group);
 mutation!(delete_tunnel, id: u64, ());
 mutation!(save_group, group: Group, u64);
 mutation!(delete_group, id: u64, ());
@@ -249,6 +251,8 @@ fn main() {
             import_jumpers,
             delete_jumper,
             save_tunnel,
+            set_tunnel_auto_start,
+            clone_group,
             delete_tunnel,
             save_group,
             delete_group,

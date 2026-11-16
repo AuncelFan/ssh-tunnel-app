@@ -10,6 +10,7 @@ export function logTime(event: RuntimeEvent, locale: string): string {
 const actions: Record<string, string> = {
   save_jumper: 'Save jumper', delete_jumper: 'Delete jumper', import_jumpers: 'Import SSH config',
   save_tunnel: 'Save tunnel', delete_tunnel: 'Delete tunnel', import_command_tunnels: 'Import SSH command',
+  set_tunnel_auto_start: 'Start automatically', clone_group: 'Clone group',
   save_group: 'Save group', delete_group: 'Delete group', reorder_groups: 'Reorder groups',
   set_traffic_monitor: 'Traffic monitoring', set_auto_run: 'Launch at login', approve_probe_key: 'Confirm server identity',
   confirm_import: 'Import configuration', export_config: 'Export configuration', relocate_config: 'Change directory',

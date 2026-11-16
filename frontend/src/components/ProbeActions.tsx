@@ -4,6 +4,7 @@ import type { Jumper, Tunnel } from '../types'
 import { useLocale } from '../locale'
 import { Modal } from './Modal'
 import { HostTrustDialog } from './HostTrustDialog'
+import { IconButton } from './IconButton'
 
 const phases: Record<string, string> = {
   configuration: 'Configuration validation', local_bind: 'Local listening port', ssh_authentication: 'SSH connection and authentication',
@@ -25,7 +26,7 @@ const stageHints: Record<string, string> = {
   remote_target: 'Check the destination from the final jumper, not only from this computer.',
 }
 
-export function ProbeActions({ jumpers, tunnel = null, disabled = false }: { jumpers: Jumper[]; tunnel?: Tunnel | null; disabled?: boolean }) {
+export function ProbeActions({ jumpers, tunnel = null, disabled = false, iconOnly = false }: { jumpers: Jumper[]; tunnel?: Tunnel | null; disabled?: boolean; iconOnly?: boolean }) {
   const { t } = useLocale()
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -77,7 +78,10 @@ export function ProbeActions({ jumpers, tunnel = null, disabled = false }: { jum
     finally { if (sequence === generation.current) setBusy(false) }
   }
   return <>
-    <div className="actions"><button type="button" disabled={disabled || busy} onClick={() => { void start(false) }}>{t('Test connection')}</button><button type="button" disabled={disabled || busy} onClick={() => { void start(true) }}>{t('Diagnose connection')}</button></div>
+    <div className={iconOnly ? 'probe-actions' : 'actions'}>{iconOnly ? <>
+      <IconButton icon="test" label={t('Test connection')} disabled={disabled || busy} onClick={() => { void start(false) }} />
+      <IconButton icon="diagnose" label={t('Diagnose connection')} disabled={disabled || busy} onClick={() => { void start(true) }} />
+    </> : <><button type="button" disabled={disabled || busy} onClick={() => { void start(false) }}>{t('Test connection')}</button><button type="button" disabled={disabled || busy} onClick={() => { void start(true) }}>{t('Diagnose connection')}</button></>}</div>
     {show && <Modal title={t('Connection test')} closeLabel={t('Close test')} onClose={close}>
       <p className="notice">{t('Tests do not save drafts. Confirmed host keys are saved. Stop a running tunnel before testing its listening port.')}</p>
       {busy && <p role="status">{t('Testing connection...')}</p>}
