@@ -49,7 +49,7 @@ try {
         await page.setViewportSize({ width, height: 760 })
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${locale}/${theme}/${width}: document overflow`)
         for (const row of await page.locator('article').all()) {
-          await expect(row.getByRole('button')).toHaveCount(7)
+          await expect(row.getByRole('button')).toHaveCount(6)
           await expect(row.getByRole('switch')).toHaveCount(1)
           assert.equal(await row.evaluate(article => {
             const bounds = article.getBoundingClientRect()

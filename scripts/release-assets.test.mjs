@@ -42,7 +42,7 @@ test('complete matching artifacts generate checksums for every attachment', asyn
   const dir = await fixture(t)
   await manifests(dir)
   await verifyAssets(dir, '0.1.0', commit)
-  assert.equal((await readFile(path.join(dir, 'SHA256SUMS'), 'utf8')).trim().split('\n').length, 8)
+  assert.equal((await readFile(path.join(dir, 'SHA256SUMS'), 'utf8')).trim().split('\n').length, 9)
 })
 for (const fault of ['missing-platform', 'tampered', 'wrong-commit', 'unexpected-file', 'unsafe-name']) {
   test(`publication rejects ${fault}`, async t => {
@@ -65,6 +65,7 @@ test('Windows collection names assets explicitly and refuses stale output', asyn
   const dir = await fixture(t)
   const release = path.join(dir, 'target/release')
   await mkdir(path.join(release, 'bundle/nsis'), { recursive: true })
+  await writeFile(path.join(release, 'ssh-tunnel-cli.exe'), 'console')
   await writeFile(path.join(release, 'ssh-tunnel.exe'), 'portable')
   await writeFile(path.join(release, 'bundle/nsis/ssh-tunnel_0.1.0_x64-setup.exe'), 'installer')
   const output = path.join(dir, 'assets')

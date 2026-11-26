@@ -30,7 +30,7 @@ export function assetNames(version, platform) {
   assert.ok(platforms.includes(platform), 'Unsupported release platform')
   const prefix = `ssh-tunnel-${version}`
   return {
-    'windows-x64': [`${prefix}-windows-x64.exe`, `${prefix}-windows-x64-setup.exe`],
+    'windows-x64': [`${prefix}-windows-x64.exe`, `ssh-tunnel-cli-${version}-windows-x64.exe`, `${prefix}-windows-x64-setup.exe`],
     'macos-universal': [`${prefix}-macos-universal.dmg`],
     'linux-x64': [`${prefix}-linux-x64.AppImage`, `${prefix}-linux-x64.deb`],
   }[platform]
@@ -54,7 +54,7 @@ export async function collect(platform, version, commit, output, directory = roo
   const release = path.join(directory, 'target', platform === 'macos-universal' ? 'universal-apple-darwin/release' : 'release')
   let sources
   if (platform === 'windows-x64') {
-    sources = [path.join(release, 'ssh-tunnel.exe'), await bundleFile(path.join(release, 'bundle/nsis'), '.exe', version)]
+    sources = [path.join(release, 'ssh-tunnel.exe'), path.join(release, 'ssh-tunnel-cli.exe'), await bundleFile(path.join(release, 'bundle/nsis'), '.exe', version)]
   } else if (platform === 'macos-universal') {
     sources = [await bundleFile(path.join(release, 'bundle/dmg'), '.dmg', version)]
   } else {

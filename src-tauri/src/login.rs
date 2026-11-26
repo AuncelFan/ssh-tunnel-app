@@ -1,4 +1,4 @@
-use ssh_tunnel_core::{controller::Controller, login::LoginStartup};
+use ssh_tunnel_core::login::LoginStartup;
 
 pub struct NativeLogin {
     #[cfg(windows)]
@@ -6,7 +6,7 @@ pub struct NativeLogin {
     #[cfg(windows)]
     command: String,
     #[cfg(not(windows))]
-    app: tauri::AppHandle,
+    launcher: auto_launch::AutoLaunch,
 }
 
 pub fn entry_name() -> String {
@@ -38,7 +38,7 @@ fn command_line(executable: &str, config: &str) -> Result<String, String> {
 }
 
 impl NativeLogin {
-    pub fn new(_app: tauri::AppHandle, config: &std::path::Path) -> Result<Self, String> {
+    pub fn new(config: &std::path::Path) -> Result<Self, String> {
         #[cfg(windows)]
         {
             Ok(Self {
@@ -53,8 +53,21 @@ impl NativeLogin {
         }
         #[cfg(not(windows))]
         {
-            let _ = config;
-            Ok(Self { app: _app })
+            let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+            #[cfg(target_os = "linux")]
+            let executable = std::env::var_os("APPIMAGE")
+                .map(std::path::PathBuf::from)
+                .unwrap_or(executable);
+            let mut builder = auto_launch::AutoLaunchBuilder::new();
+            builder
+                .set_app_name(&entry_name())
+                .set_app_path(&executable.to_string_lossy())
+                .set_args(&["--config", &config.to_string_lossy()]);
+            #[cfg(target_os = "macos")]
+            builder.set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent);
+            Ok(Self {
+                launcher: builder.build().map_err(|e| e.to_string())?,
+            })
         }
     }
 }
@@ -154,43 +167,22 @@ impl LoginStartup for NativeLogin {
         self.apply(snapshot)
     }
     fn enabled(&self) -> Result<bool, String> {
-        use tauri_plugin_autostart::ManagerExt;
-        self.app
-            .autolaunch()
-            .is_enabled()
-            .map_err(|e| e.to_string())
+        self.launcher.is_enabled().map_err(|e| e.to_string())
     }
     fn apply(&self, enabled: bool) -> Result<(), String> {
-        use tauri_plugin_autostart::ManagerExt;
-        let manager = self.app.autolaunch();
         (if enabled {
-            manager.enable()
+            self.launcher.enable()
         } else {
-            manager.disable()
+            self.launcher.disable()
         })
         .map_err(|e| e.to_string())
     }
 }
 
-#[tauri::command]
-pub fn get_auto_run(state: tauri::State<'_, NativeLogin>) -> Result<bool, String> {
-    state.enabled()
-}
-
-#[tauri::command]
-pub async fn set_auto_run(
-    controller: tauri::State<'_, Controller>,
-    platform: tauri::State<'_, NativeLogin>,
-    enabled: bool,
-) -> Result<(), String> {
-    let result = controller.set_auto_run(enabled, &*platform).await;
-    controller.record_activity("set_auto_run", result.is_ok());
-    result
-}
-
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use ssh_tunnel_core::controller::Controller;
     #[tokio::test]
     async fn failed_config_save_restores_exact_legacy_command_for_enable_and_disable() {
         struct Cleanup(String);

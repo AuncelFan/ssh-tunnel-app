@@ -14,7 +14,7 @@ vi.mock('./api', () => ({ api: {
   takeStartupErrors: vi.fn(async () => []), getAutoRun: vi.fn(async () => false),
   runtime: vi.fn(), logs: vi.fn(async () => []),
   saveTunnel: vi.fn(async () => 8), deleteTunnel: vi.fn(async () => {}),
-  setTunnelAutoStart: vi.fn(async () => {}), cloneGroup: vi.fn(),
+  setTunnelAutoStart: vi.fn(async () => {}), cloneGroup: vi.fn(), deleteSelection: vi.fn(async () => {}),
   startTunnel: vi.fn(async () => {}), stopTunnel: vi.fn(async () => {}),
   beginProbe: vi.fn(async () => 42), runProbe: vi.fn(async () => ({ success: true, elapsed_ms: 1, latency_ms: null, checks: [], challenge: null })),
   cancelProbe: vi.fn(async () => {}),
@@ -55,7 +55,7 @@ test('navigation puts overview immediately before settings and opens tunnels fir
 test('all tunnel operations are accessible icons in the list and details contain no action controls', async () => {
   setup()
   const row = await screen.findByRole('article')
-  for (const label of ['Start', 'Test connection', 'Diagnose connection', 'Edit tunnel', 'Duplicate tunnel', 'Delete tunnel', 'Details: Database']) {
+  for (const label of ['Start', 'Test connection', 'Edit tunnel', 'Duplicate tunnel', 'Delete tunnel', 'Details: Database']) {
     const button = within(row).getByRole('button', { name: label })
     expect(button.querySelector('svg')).toBeTruthy()
     expect(button.textContent).toBe('')
@@ -64,7 +64,7 @@ test('all tunnel operations are accessible icons in the list and details contain
   expect(within(row).getByRole('switch', { name: 'Start automatically: Database' })).toBeTruthy()
   fireEvent.click(within(row).getByRole('button', { name: 'Test connection' }))
   await screen.findByText('Connection test passed')
-  expect(api.beginProbe).toHaveBeenCalledWith(expect.objectContaining({ diagnostics: false, tunnel: expect.objectContaining({ id: 7 }) }))
+  expect(api.beginProbe).toHaveBeenCalledWith(expect.objectContaining({ diagnostics: true, tunnel: expect.objectContaining({ id: 7 }) }))
   fireEvent.click(screen.getByRole('button', { name: 'Close test' }))
   fireEvent.click(within(row).getByRole('button', { name: 'Details: Database' }))
   expect(within(screen.getByRole('dialog')).queryByRole('button')).toBeNull()
@@ -85,7 +85,7 @@ test('duplicating a tunnel opens an independent draft with its original name', a
 test('running tunnels keep stop, copy, delete and auto-start available while edit and probes are disabled', async () => {
   const config = setup('running')
   const row = await screen.findByRole('article')
-  for (const label of ['Edit tunnel', 'Test connection', 'Diagnose connection']) {
+  for (const label of ['Edit tunnel', 'Test connection']) {
     expect((within(row).getByRole('button', { name: label }) as HTMLButtonElement).disabled).toBe(true)
   }
   for (const label of ['Stop', 'Duplicate tunnel', 'Delete tunnel']) {
@@ -118,19 +118,17 @@ test('a failed auto-start write leaves the switch unchanged and reports the erro
   expect(api.stopTunnel).not.toHaveBeenCalled()
 })
 
-test('cloning the selected group sends its complete membership and selects the new group', async () => {
+test('cloning the selected group sends its complete membership and selects the target machine', async () => {
   const config = setup()
-  const group = { id: 10, name: 'Machine B services', tunnel_ids: [8] }
   vi.mocked(api.cloneGroup).mockImplementation(async () => {
-    vi.mocked(api.getState).mockResolvedValue({ ...config, groups: [group], tunnels: [...config.tunnels, { ...config.tunnels[0], id: 8, jumper_ids: [2] }] })
-    return group
+    vi.mocked(api.getState).mockResolvedValue({ ...config, tunnels: [...config.tunnels, { ...config.tunnels[0], id: 8, jumper_ids: [2] }] })
+    return [8]
   })
   fireEvent.click(await screen.findByRole('button', { name: 'Clone group' }))
   const dialog = screen.getByRole('dialog')
-  fireEvent.change(within(dialog).getByLabelText('Group name'), { target: { value: group.name } })
   fireEvent.click(within(dialog).getByRole('button', { name: 'Clone group' }))
-  await waitFor(() => expect(api.cloneGroup).toHaveBeenCalledWith({ name: group.name, tunnel_ids: [7], target_jumper_id: 2 }))
-  await screen.findByRole('heading', { name: group.name })
+  await waitFor(() => expect(api.cloneGroup).toHaveBeenCalledWith({ tunnel_ids: [7], target_jumper_id: 2 }))
+  await screen.findByRole('heading', { name: 'Machine B' })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(api.startTunnel).not.toHaveBeenCalled()
 })
@@ -154,4 +152,28 @@ test('overview and tunnel details show rolling-hour volume instead of lifetime v
   fireEvent.click(screen.getByRole('button', { name: 'Overview' }))
   expect(screen.getByText('Last hour: 133 B')).toBeTruthy()
   expect(screen.getByText('Last hour: 476 B')).toBeTruthy()
+})
+
+test('selected tunnels may be cloned or deleted independently of the group', async () => {
+  const config = setup()
+  config.tunnels.push({ ...config.tunnels[0], id: 9, name: 'Cache' }, { ...config.tunnels[0], id: 10, name: 'SSH' })
+  for (const name of ['Database', 'SSH']) fireEvent.click(await screen.findByRole('checkbox', { name: `Select tunnel: ${name}`}))
+  fireEvent.click(screen.getByRole('button', { name: 'Clone selected' }))
+  expect(within(screen.getByRole('dialog')).queryByText('Cache')).toBeNull()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+  expect(api.deleteSelection).not.toHaveBeenCalled()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+  await waitFor(() => expect(api.deleteSelection).toHaveBeenCalledWith([7,10], null))
+})
+
+test('jumper deletion previews a later-hop dependency and sends the reviewed IDs', async () => {
+  const config = setup()
+  config.tunnels[0].jumper_ids = [1,2]
+  fireEvent.click(await screen.findByRole('button', { name: 'Jumpers' }))
+  fireEvent.click(within(screen.getByText('Machine B').closest('article')!).getByRole('button', { name: 'Delete' }))
+  const dialog = screen.getByRole('dialog')
+  expect(within(dialog).getByText(/Database \(#7\)/)).toBeTruthy()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+  await waitFor(() => expect(api.deleteSelection).toHaveBeenCalledWith([7],2))
 })

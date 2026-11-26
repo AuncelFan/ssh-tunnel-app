@@ -127,3 +127,8 @@ code { color: var(--mint); }
 .clone-tunnels code { overflow-wrap: anywhere; }
 @media (max-width: 1000px) { .tunnel-card { flex-wrap: wrap; } .tunnel-card .card-main { flex-basis: 100%; } .tunnel-card .tunnel-actions { margin-left: auto; } }
 @media (max-width: 760px) { main { grid-template-columns: minmax(0, 1fr); } main > nav { flex-direction: row; flex-wrap: wrap; } main > nav button { max-width: 180px; } }
+
+.tunnel-summary { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.tunnel-summary input { width: 16px; height: 16px; flex: none; }
+.selection-actions { flex-wrap: wrap; margin-bottom: 8px; }
+@media (max-width: 1000px) { .tunnel-summary { flex-basis: 100%; } }

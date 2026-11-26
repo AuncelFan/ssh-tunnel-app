@@ -44,7 +44,7 @@ impl Controller {
             operations: AsyncMutex::new(()),
             known_hosts,
             pending_import: Mutex::new(None),
-            import_generation: Default::default(),
+            import_generation: crate::generation_counter(),
         })
     }
 
@@ -522,7 +522,7 @@ impl Controller {
     pub async fn clone_group(
         &self,
         request: crate::repository::GroupClone,
-    ) -> Result<Group, String> {
+    ) -> Result<Vec<u64>, String> {
         let _guard = self.operations.lock().await;
         self.repository
             .lock()
@@ -532,25 +532,46 @@ impl Controller {
     }
 
     pub async fn delete_tunnel(&self, id: u64) -> Result<(), String> {
+        self.delete_selection(&[id], None).await
+    }
+
+    pub async fn delete_selection(
+        &self,
+        ids: &[u64],
+        jumper_id: Option<u64>,
+    ) -> Result<(), String> {
         let _guard = self.operations.lock().await;
-        self.runtime.stop(id).await;
         self.repository
             .lock()
             .expect("Configuration lock poisoned")
-            .delete_tunnel(id)
+            .delete_selection(ids, jumper_id)
             .map_err(|error| error.to_string())?;
-        self.runtime.forget(id).await;
+        for &id in ids {
+            self.runtime.forget(id).await;
+        }
         Ok(())
     }
     pub async fn save_jumper(&self, jumper: Jumper) -> Result<u64, String> {
+        self.save_jumper_record(jumper, false).await
+    }
+    pub async fn save_jumper_record(
+        &self,
+        mut jumper: Jumper,
+        preserve_password: bool,
+    ) -> Result<u64, String> {
         let _guard = self.operations.lock().await;
-        for tunnel in self
-            .snapshot()
+        let config = self.snapshot();
+        for tunnel in config
             .tunnels
             .iter()
             .filter(|tunnel| tunnel.jumper_ids.contains(&jumper.id))
         {
             self.ensure_idle(tunnel.id)?;
+        }
+        if preserve_password
+            && let Some(old) = config.jumpers.into_iter().find(|j| j.id == jumper.id)
+        {
+            jumper.password = old.password;
         }
         self.repository
             .lock()

@@ -1,12 +1,11 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
-export type IconName = 'start' | 'stop' | 'test' | 'diagnose' | 'edit' | 'duplicate' | 'delete' | 'details' | 'clone'
+export type IconName = 'start' | 'stop' | 'test' | 'edit' | 'duplicate' | 'delete' | 'details' | 'clone'
 
 const paths: Record<IconName, ReactNode> = {
   start: <path d="m8 5 11 7-11 7Z" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="1" />,
   test: <><path d="m13 2-8 12h6l-1 8 9-13h-6Z" /></>,
-  diagnose: <><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6M7 10h6m-3-3v6" /></>,
   edit: <><path d="m15 5 4 4M4 20l4-1L20 7a3 3 0 0 0-4-4L4 15Z" /></>,
   duplicate: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V3H3v13h5" /></>,
   delete: <><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7" /></>,

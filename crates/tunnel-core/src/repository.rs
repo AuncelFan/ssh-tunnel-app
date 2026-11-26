@@ -36,7 +36,6 @@ pub struct TunnelAutoStart {
 
 #[derive(serde::Deserialize)]
 pub struct GroupClone {
-    pub name: String,
     pub tunnel_ids: Vec<u64>,
     pub target_jumper_id: u64,
 }
@@ -164,16 +163,48 @@ impl Repository {
     }
 
     pub fn delete_jumper(&mut self, id: u64) -> Result<(), StorageError> {
+        self.delete_selection(&[], Some(id))
+    }
+
+    /// Commit the exact selection that the caller reviewed, including every hop dependency.
+    pub fn delete_selection(
+        &mut self,
+        ids: &[u64],
+        jumper_id: Option<u64>,
+    ) -> Result<(), StorageError> {
         self.transaction(|config| {
-            if config.tunnels.iter().any(|t| t.jumper_ids.contains(&id)) {
-                return Err("Jumper is used by a tunnel".into());
+            let selected: std::collections::HashSet<_> = ids.iter().copied().collect();
+            if selected.len() != ids.len() || (selected.is_empty() && jumper_id.is_none()) {
+                return Err("Select distinct tunnels to delete".into());
             }
-            let index = config
-                .jumpers
+            if config
+                .tunnels
                 .iter()
-                .position(|j| j.id == id)
-                .ok_or("Jumper not found")?;
-            config.jumpers.remove(index);
+                .filter(|t| selected.contains(&t.id))
+                .count()
+                != selected.len()
+            {
+                return Err("A selected tunnel no longer exists".into());
+            }
+            if let Some(id) = jumper_id {
+                let index = config
+                    .jumpers
+                    .iter()
+                    .position(|j| j.id == id)
+                    .ok_or("Jumper not found")?;
+                if config
+                    .tunnels
+                    .iter()
+                    .any(|t| t.jumper_ids.contains(&id) != selected.contains(&t.id))
+                {
+                    return Err("Review all tunnels that use this jumper before deleting".into());
+                }
+                config.jumpers.remove(index);
+            }
+            config.tunnels.retain(|t| !selected.contains(&t.id));
+            for group in &mut config.groups {
+                group.tunnel_ids.retain(|id| !selected.contains(id));
+            }
             Ok(())
         })
     }
@@ -210,8 +241,8 @@ impl Repository {
         })
     }
 
-    /// Creates the group and its stopped tunnels in a single configuration write.
-    pub fn clone_group(&mut self, request: GroupClone) -> Result<Group, StorageError> {
+    /// Creates stopped tunnel copies under their new first hop in a single configuration write.
+    pub fn clone_group(&mut self, request: GroupClone) -> Result<Vec<u64>, StorageError> {
         self.transaction(|config| {
             let unique: std::collections::HashSet<_> = request.tunnel_ids.iter().copied().collect();
             if unique.is_empty() || unique.len() > 2000 || unique.len() != request.tunnel_ids.len()
@@ -243,11 +274,7 @@ impl Repository {
             {
                 return Err("Select a different target jumper".into());
             }
-            let mut group = Group {
-                id: next_id(config.groups.iter().map(|group| group.id))?,
-                name: request.name.trim().into(),
-                tunnel_ids: Vec::with_capacity(sources.len()),
-            };
+            let mut cloned = Vec::with_capacity(sources.len());
             for mut tunnel in sources {
                 let first = tunnel
                     .jumper_ids
@@ -270,11 +297,10 @@ impl Repository {
                 tunnel.last_error.clear();
                 // Identical local listeners must not compete on the next application launch.
                 tunnel.auto_start = false;
-                group.tunnel_ids.push(tunnel.id);
+                cloned.push(tunnel.id);
                 config.tunnels.push(tunnel);
             }
-            config.groups.push(group.clone());
-            Ok(group)
+            Ok(cloned)
         })
     }
 
@@ -369,18 +395,7 @@ impl Repository {
     }
 
     pub fn delete_tunnel(&mut self, id: u64) -> Result<(), StorageError> {
-        self.transaction(|config| {
-            let index = config
-                .tunnels
-                .iter()
-                .position(|t| t.id == id)
-                .ok_or("Tunnel not found")?;
-            config.tunnels.remove(index);
-            for group in &mut config.groups {
-                group.tunnel_ids.retain(|member| *member != id);
-            }
-            Ok(())
-        })
+        self.delete_selection(&[id], None)
     }
 
     pub fn save_group(&mut self, mut group: Group) -> Result<u64, StorageError> {
@@ -505,6 +520,46 @@ mod tests {
                 .all(|g| g.tunnel_ids.is_empty())
         );
         repo.delete_jumper(1).unwrap();
+    }
+
+    #[test]
+    fn cascade_requires_exact_dependencies_including_later_hops() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut repo = populated(&path);
+        let config = repo.snapshot();
+        repo.save_jumper(Jumper {
+            id: 0,
+            name: "Second".into(),
+            ..config.jumpers[0].clone()
+        })
+        .unwrap();
+        for chain in [vec![2, 1], vec![2]] {
+            repo.save_tunnel(Tunnel {
+                id: 0,
+                jumper_ids: chain,
+                ..config.tunnels[0].clone()
+            })
+            .unwrap();
+        }
+        repo.save_group(Group {
+            id: 0,
+            name: "Work".into(),
+            tunnel_ids: vec![1, 2, 3],
+        })
+        .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        for invalid in [&[1][..], &[1, 2, 3], &[1, 1], &[1, 99]] {
+            assert!(repo.delete_selection(invalid, Some(1)).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        }
+        repo.delete_selection(&[2, 1], Some(1)).unwrap();
+        let after = Repository::open(Storage::new(&path)).unwrap().snapshot();
+        assert_eq!(after.groups[0].tunnel_ids, vec![3]);
+        assert_eq!(after.jumpers.len(), 1);
+        assert_eq!(after.jumpers[0].id, 2);
+        assert_eq!(after.tunnels.len(), 1);
+        assert_eq!(after.tunnels[0].id, 3);
     }
 
     #[test]
@@ -764,19 +819,17 @@ mod tests {
         let original = repo.snapshot();
         let group = repo
             .clone_group(GroupClone {
-                name: " Target machine ".into(),
                 tunnel_ids: vec![2, 3, 4],
                 target_jumper_id: 2,
             })
             .unwrap();
-        assert_eq!(group.name, "Target machine");
-        assert_eq!(group.tunnel_ids, vec![5, 6, 7]);
+        assert_eq!(group, vec![5, 6, 7]);
         let reloaded = Repository::open(Storage::new(&path)).unwrap().snapshot();
         assert_eq!(&reloaded.tunnels[..4], &original.tunnels);
         assert!(reloaded.jumpers == original.jumpers);
         assert_eq!(reloaded.trusted_hosts.len(), original.trusted_hosts.len());
         assert_eq!(reloaded.groups[0], original.groups[0]);
-        assert_eq!(reloaded.groups[1], group);
+        assert_eq!(reloaded.groups, original.groups);
         for (source, cloned) in original.tunnels[1..].iter().zip(&reloaded.tunnels[4..]) {
             let mut expected = source.clone();
             expected.id = cloned.id;
@@ -807,18 +860,16 @@ mod tests {
         })
         .unwrap();
         let before = std::fs::read(&path).unwrap();
-        for (name, tunnel_ids, target_jumper_id) in [
-            ("Clone", vec![], 2),
-            ("Clone", vec![1, 1], 2),
-            ("Clone", vec![1, 999], 2),
-            ("Clone", vec![1], 999),
-            ("Clone", vec![1], 1),
-            (" ", vec![1], 2),
-            ("Clone", vec![1, 2], 2),
+        for (tunnel_ids, target_jumper_id) in [
+            (vec![], 2),
+            (vec![1, 1], 2),
+            (vec![1, 999], 2),
+            (vec![1], 999),
+            (vec![1], 1),
+            (vec![1, 2], 2),
         ] {
             assert!(
                 repo.clone_group(GroupClone {
-                    name: name.into(),
                     tunnel_ids,
                     target_jumper_id
                 })
@@ -832,7 +883,6 @@ mod tests {
         std::fs::create_dir(&path).unwrap();
         assert!(
             repo.clone_group(GroupClone {
-                name: "Clone".into(),
                 tunnel_ids: vec![1],
                 target_jumper_id: 2
             })

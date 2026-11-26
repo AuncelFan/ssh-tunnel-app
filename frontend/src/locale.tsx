@@ -3,6 +3,8 @@ import { api } from './api'
 
 export type Locale = 'en' | 'zh-CN'
 export const zh: Record<string, string> = {
+  'Select tunnel': '选择隧道', 'Selected': '已选', 'Selected tunnels': '已选隧道', 'Clone selected': '克隆所选', 'Delete selected': '删除所选',
+  'Delete selected tunnels?': '删除所选隧道？', 'These tunnels will also be deleted.': '以下关联隧道也将一并删除。',
   'Tunnel actions': '隧道操作', 'Duplicate tunnel': '复制隧道',
   'Clone group': '克隆整组', 'Close group clone': '关闭整组克隆', 'Target jumper': '目标跳板机',
   'Replace the first jumper in every tunnel. Other hops, names and port mappings are preserved. Clones are stopped with auto-start off to avoid listener conflicts.': '替换每条隧道的首个跳板机，保留后续跳板链、原名和端口映射。新隧道保持停止并关闭自动启动，避免监听端口冲突。',
@@ -16,7 +18,7 @@ export const zh: Record<string, string> = {
   'Check the hostname and local DNS settings.': '请检查主机名及本机 DNS 设置。',
   'Check remote bind permissions and whether the remote port is already in use.': '请检查远程监听权限，以及远程端口是否已被占用。',
   'Check the destination from the final jumper, not only from this computer.': '请从最后一台跳板机检查目标的连通性，而不只是从本机检查。',
-  'Test connection': '测试连接', 'Diagnose connection': '诊断连接', 'Connection test': '连接测试', 'Close test': '关闭测试', 'Cancel test': '取消测试',
+  'Test connection': '测试连接', 'Connection test': '连接测试', 'Close test': '关闭测试', 'Cancel test': '取消测试',
   'Testing connection...': '正在测试连接…', 'Connection test passed': '连接测试通过', 'Connection test failed': '连接测试未通过', 'Elapsed': '耗时', 'Passed': '通过', 'Failed': '失败',
   'Configuration validation': '配置检查', 'Local listening port': '本地监听端口', 'SSH connection and authentication': 'SSH 连接与认证', 'SSH round-trip latency': 'SSH 往返延迟',
   'Remote destination': '远程目标', 'Remote listening port': '远程监听端口', 'Remote listener cleanup': '远程监听清理', 'SOCKS forwarding permission': 'SOCKS 转发权限', 'First-hop DNS': '首跳 DNS', 'First-hop TCP': '首跳 TCP', 'Private key file': '私钥文件',

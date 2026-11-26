@@ -91,14 +91,14 @@ pub fn get_ui_locale(state: tauri::State<'_, Desktop>) -> String {
 #[tauri::command]
 pub fn set_ui_locale(
     state: tauri::State<'_, Desktop>,
-    controller: tauri::State<'_, ssh_tunnel_core::controller::Controller>,
+    controller: tauri::State<'_, ssh_tunnel::Client>,
     locale: String,
 ) -> Result<(), String> {
     if !["en", "zh-CN"].contains(&locale.as_str()) {
         return Err("Unsupported UI language".into());
     }
     let mut current = state.locale.lock().expect("Locale lock poisoned");
-    let locale_path = controller.config_path().with_file_name("ui.locale");
+    let locale_path = controller.config_path()?.with_file_name("ui.locale");
     let parent = locale_path
         .parent()
         .ok_or("Missing configuration directory")?;

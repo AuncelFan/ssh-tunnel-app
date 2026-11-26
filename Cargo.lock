@@ -4121,21 +4121,27 @@ dependencies = [
 
 [[package]]
 name = "ssh-tunnel"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
+ "auto-launch",
+ "dirs 6.0.0",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "socket2",
  "ssh-tunnel-core",
  "tauri",
  "tauri-build",
- "tauri-plugin-autostart",
  "tauri-plugin-dialog",
  "tempfile",
  "tokio",
  "windows-registry",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "ssh-tunnel-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "glob",
  "hmac",
@@ -4462,20 +4468,6 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
-]
-
-[[package]]
-name = "tauri-plugin-autostart"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bce56ceb0a99b8ab5eebc977ba9ffc62391b862648cb9ab76fc8bc7231b8f7e2"
-dependencies = [
- "auto-launch",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.21",
 ]
 
 [[package]]

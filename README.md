@@ -3,7 +3,7 @@
 [简体中文](README.CN.md)
 
 A desktop SSH tunnel manager built with **Tauri 2 + React + TypeScript + Rust**.
-Version: **0.1.1**.
+Version: **0.1.2**.
 
 ## Screenshots
 
@@ -31,17 +31,32 @@ Local, remote and SOCKS5 forwarding with jumper filters, custom groups and group
   fixed intervals and exponential backoff. Stop cancels pending reconnects.
 - All/default-jumper/custom group filters, overlapping membership, group ordering
   and one-click group start/stop.
-- Tunnel rows expose start/stop, test, diagnose, edit, duplicate, delete and details
+- Tunnel rows expose start/stop, connection diagnostics, edit, duplicate, delete and details
   as icons with hover labels, plus an auto-start switch. Duplicates keep the original name.
-- Clone an entire group from its header, choosing a target jumper and a new group name.
+- Select individual tunnels for batch deletion or cloning, or clone an entire group from its header. Clones appear in the target jumper’s default group.
   Only the first hop changes; subsequent hops and port mappings are preserved.
   Clones are stopped with auto-start off to avoid competing listeners.
+- Deleting a jumper previews all dependent tunnels, including later-hop references, for confirmation.
 - Live rates and rolling last-hour traffic volumes in details and the overview.
   History uses one-second buckets, survives tunnel restarts and expires while idle.
   It is in-memory and resets on application exit or configuration replacement.
 - Connection testing, SSH latency measurement and local diagnostic recommendations.
 - Reviewed SSH config/command imports, configuration export and directory relocation.
 - Tray behavior, login startup, light/dark pixel-style UI, Simplified Chinese and English.
+
+## Command line
+
+Keep `ssh-tunnel.exe` (GUI) and `ssh-tunnel-cli.exe` (console) together. Run `ssh-tunnel-cli --help` for the catalog, `help COMMAND` for arguments, and `agent-help` for automation. Operational commands send JSON to stdout and agent hints to stderr. Place `--no-hints` before the command to suppress hints. Both executables support `--version`. Existing `ssh-tunnel.exe cli …` calls still work. Both entry points attach to the background controller for the same user and configuration anchor. CLI commands work before the GUI opens. Closing a client command leaves listeners running. Use `ssh-tunnel-cli shutdown` or Quit application to stop them. Supply the same absolute `--config` to both entry points when working with a custom configuration. `SSH_TUNNEL_CONFIG` takes precedence.
+
+```powershell
+.\ssh-tunnel-cli.exe agent-help
+.\ssh-tunnel-cli.exe list | ConvertFrom-Json
+.\ssh-tunnel-cli.exe start 1
+.\ssh-tunnel-cli.exe status | ConvertFrom-Json
+'{"request":{"tunnel_ids":[1,2],"target_jumper_id":3}}' | .\ssh-tunnel-cli.exe clone_group -
+```
+
+Use IDs from `list`. `start` requests startup. Poll `list` and check `get_pending_trust` for a host-key challenge. Verify the fingerprint before calling `resolve_host_key`. `test ID` diagnoses a stopped tunnel. Stdout contains JSON, errors go to stderr. Exit codes are 0 for success, 1 for operation failure, 2 for usage/JSON errors, and 3 for a negative test report or pending probe challenge. Pass UTF-8 JSON on stdin (`-`) for credentials. `list` omits passwords. An explicit configuration export contains plaintext credentials.
 
 ## Requirements
 
@@ -98,20 +113,20 @@ and exact-byte configuration backups in a synthetic home. Evidence is kept under
 
 ## Windows Release
 
-The release build produces `target/release/ssh-tunnel.exe`. After building/testing
+The release build produces both executables in `target/release/`. After building/testing
 from a clean committed tree, run:
 
 ```powershell
 pnpm stage:windows
 ```
 
-This preserves the EXE in `build/bin/0.1.1/`, with `SHA256SUMS` and `build-info.json`.
+This preserves both executables in `build/bin/0.1.2/`, with `SHA256SUMS` and `build-info.json`.
 It refuses to overwrite different bytes already staged for that version. The EXE
 requires WebView2 and is not a signed installer.
 
 ## Tagged Releases
 
-Only pushing a stable version tag (for example `v0.1.1`) triggers the release workflow.
+Only pushing a stable version tag (for example `v0.1.2`) triggers the release workflow.
 Ordinary code pushes and pull requests do not start it. All platform builds/tests must
 pass before Windows EXE/NSIS, macOS Universal DMG and Linux AppImage/DEB packages are
 uploaded and published together with checksums and source manifests.

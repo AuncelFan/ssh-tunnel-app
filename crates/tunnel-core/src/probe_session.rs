@@ -24,11 +24,20 @@ struct Session {
     challenge: Option<HostKeyChallenge>,
 }
 
-#[derive(Default)]
 pub struct Sessions {
     finished: tokio::sync::Notify,
     generation: AtomicU64,
     current: Mutex<Option<Session>>,
+}
+
+impl Default for Sessions {
+    fn default() -> Self {
+        Self {
+            finished: Default::default(),
+            generation: crate::generation_counter(),
+            current: Default::default(),
+        }
+    }
 }
 
 impl Sessions {

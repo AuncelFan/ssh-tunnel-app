@@ -16,8 +16,8 @@ are stable `vMAJOR.MINOR.PATCH` versions; invalid tags fail before building.
 4. Push the intended source to `main`, then create and push the annotated version tag:
 
 ```powershell
-git tag -a v0.1.1 -m "ssh-tunnel v0.1.1"
-git push origin v0.1.1
+git tag -a v0.1.2 -m "ssh-tunnel v0.1.2"
+git push origin v0.1.2
 ```
 
 Never move a published tag to fix a failed build. Prefer a new version. If an upload
@@ -28,7 +28,7 @@ deleting it and rerunning. The workflow does not silently clobber draft assets.
 
 - Validate the tag against every package version and require version-specific notes.
 - Run Rust/React tests and lint on Windows, macOS and Ubuntu 22.04.
-- Windows x64: portable EXE and current-user NSIS installer; run both native WebView2
+- Windows x64: portable GUI and CLI executables and current-user NSIS installer; run both native WebView2
   configuration-isolation regression modes against the bundled executable.
 - macOS: Universal DMG with x86_64 + arm64; verify both architectures and code signature.
 - Linux x64: AppImage and DEB, built on Ubuntu 22.04.
@@ -50,7 +50,7 @@ macOS:   rustup target add aarch64-apple-darwin x86_64-apple-darwin
 Linux:   pnpm build:linux
 ```
 
-Windows output: `target/release/bundle/nsis/` and `target/release/ssh-tunnel.exe`.
+Windows output: `target/release/bundle/nsis/` and both `ssh-tunnel.exe` and `ssh-tunnel-cli.exe` under `target/release/`.
 macOS output: `target/universal-apple-darwin/release/bundle/dmg/`.
 Linux output: `target/release/bundle/appimage/` and `target/release/bundle/deb/`.
 Linux needs the system packages listed in the workflow; WSL can build Linux packages,

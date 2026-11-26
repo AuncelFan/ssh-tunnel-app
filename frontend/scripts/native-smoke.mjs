@@ -63,6 +63,25 @@ function launchApp(debugPort) { return spawn(executable, implicitConfig ? [] : [
     WEBVIEW2_USER_DATA_FOLDER: path.join(fixture, 'webview') },
   stdio: ['ignore', 'pipe', 'pipe'],
 }) }
+const cliEnv = { ...inheritedEnv, ...syntheticEnvironment, SSH_TUNNEL_AUTOSTART_NAME: autostartName, SSH_TUNNEL_KNOWN_HOSTS: path.join(fixture, 'known_hosts') }
+async function cli(command, ...args) {
+  const consoleExe = path.join(path.dirname(executable), 'ssh-tunnel-cli.exe')
+  const result = await execFileAsync(consoleExe, [...(implicitConfig ? [] : ['--config', config]), command, ...args], { windowsHide: true, env: cliEnv, timeout: 40000 })
+  assert.match(result.stderr, /AI agent:/)
+  return JSON.parse(result.stdout)
+}
+// Race two independent console processes before the first window exists.
+try {
+  const coldStart = Date.now()
+  const [initialConfig, initialRuntime] = await Promise.all([cli('list'), cli('status')])
+  assert.equal(initialConfig.tunnels.length, 0)
+  assert.deepEqual(initialRuntime, [])
+  // A daemon inheriting its client's stdout keeps the pipe open until execFile's timeout.
+  assert.ok(Date.now() - coldStart < 35000, 'Cold CLI clients must close their pipes before the timeout')
+} catch (error) {
+  await cli('shutdown').catch(() => {})
+  throw error
+}
 let child = launchApp(port)
 let output = ''
 child.stdout.on('data', chunk => { output += chunk })
@@ -247,12 +266,12 @@ try {
   await page.getByRole('heading', { name: 'All', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Manage groups' }).click()
   await page.getByLabel('Group name').fill('Fixture group')
-  await page.getByRole('checkbox', { name: 'Native IPC fixture' }).check()
+  await page.getByRole('checkbox', { name: 'Native IPC fixture', exact: true }).check()
   await page.getByRole('button', { name: 'Save group' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fixture group', exact: true }).waitFor()
   const group = (await invoke('get_state')).groups[0].id
   await page.getByLabel('Group name').fill('Second group')
-  await page.getByRole('checkbox', { name: 'Native IPC fixture' }).check()
+  await page.getByRole('checkbox', { name: 'Native IPC fixture', exact: true }).check()
   await page.getByRole('button', { name: 'Save group' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Second group', exact: true }).click()
   const secondGroup = (await invoke('get_state')).groups[1].id
@@ -274,7 +293,7 @@ try {
     await page.screenshot({ path: path.join(fixture, `preview-${width}.png`) })
   }
   const tunnelRow = page.locator('article')
-  for (const name of ['Start', 'Test connection', 'Diagnose connection', 'Edit tunnel', 'Duplicate tunnel', 'Delete tunnel', 'Details: Native IPC fixture']) {
+  for (const name of ['Start', 'Test connection', 'Edit tunnel', 'Duplicate tunnel', 'Delete tunnel', 'Details: Native IPC fixture']) {
     const control = tunnelRow.getByRole('button', { name, exact: true })
     await expect(control).toBeVisible()
     assert.equal(await control.locator('svg').count(), 1)
@@ -300,15 +319,13 @@ try {
   await page.getByRole('button', { name: 'Clone group', exact: true }).click()
   const cloneDialog = page.getByRole('dialog', { name: 'Clone group', exact: true })
   await cloneDialog.getByRole('combobox', { name: /^Target jumper/ }).selectOption(String(cloneTarget))
-  await cloneDialog.getByLabel('Group name', { exact: true }).fill('Cloned services')
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: path.join(fixture, 'group-clone-390.png') })
   await cloneDialog.getByRole('button', { name: 'Clone group', exact: true }).click()
-  await page.getByRole('heading', { name: 'Cloned services', exact: true }).waitFor()
+  await page.getByRole('heading', { name: 'Clone target', exact: true }).waitFor()
   const clonedState = await invoke('get_state')
-  const clonedGroup = clonedState.groups.find(item => item.name === 'Cloned services')
   const clonedTunnel = clonedState.tunnels.find(item => item.id !== tunnel)
-  assert.deepEqual(clonedGroup.tunnel_ids, [clonedTunnel.id])
+  assert.ok(clonedState.groups.every(group => !group.tunnel_ids.includes(clonedTunnel.id)))
   assert.deepEqual(clonedTunnel.jumper_ids, [cloneTarget])
   assert.equal(clonedTunnel.name, 'Native IPC fixture')
   assert.equal(clonedTunnel.local_port, localPort)
@@ -318,7 +335,6 @@ try {
   await page.locator('article').getByRole('button', { name: 'Delete tunnel', exact: true }).click()
   await page.getByRole('dialog', { name: 'Delete tunnel?', exact: true }).getByRole('button', { name: 'Delete', exact: true }).click()
   await expect.poll(async () => (await invoke('get_state')).tunnels.length).toBe(1)
-  await invoke('delete_group', { id: clonedGroup.id })
   await invoke('delete_jumper', { id: cloneTarget })
   await page.reload()
   await page.getByRole('button', { name: 'Details: Native IPC fixture' }).click()
@@ -343,6 +359,9 @@ try {
   await page.screenshot({ path: path.join(fixture, 'first-trust-390.png') })
   await page.getByRole('button', { name: 'Trust key and connect' }).click()
   await waitStatus('running')
+  assert.equal((await cli('list')).tunnels.find(item => item.id === tunnel).status, 'running')
+  assert.ok((await cli('list')).jumpers.every(jumper => !Object.hasOwn(jumper, 'password')))
+  assert.equal((await cli('status'))[0].generation, (await invoke('get_runtime'))[0].generation)
   const payload = Buffer.from('native-traffic-fixture')
   await new Promise((resolve, reject) => {
     const connection = createConnection({ host: '127.0.0.1', port: localPort })
@@ -387,12 +406,12 @@ try {
   await page.getByRole('button', { name: 'Close details' }).click()
   assert.equal((await invoke('get_state')).jumpers[0].bypass_host_verification, false)
   await assert.rejects(invoke('resolve_host_key', { id: tunnel, generation: initial.generation, accept: true }))
-  await page.locator('article').getByRole('button', { name: 'Stop', exact: true }).click()
+  await cli('stop', String(tunnel))
   await waitStatus('stopped')
   const rotatedPromise = nextFixtureLine()
   sshFixture.stdin.write('rotate\n')
   const rotated = await rotatedPromise
-  await page.locator('article').getByRole('button', { name: 'Start', exact: true }).click()
+  await cli('start', String(tunnel))
   await page.getByRole('dialog', { name: 'Server identity changed' }).waitFor()
   assert.equal(await page.getByText(ssh.fingerprint, { exact: true }).count(), 1)
   assert.equal(await page.getByText(rotated.fingerprint, { exact: true }).count(), 1)
@@ -438,7 +457,7 @@ try {
   await failureToast.getByRole('button', { name: 'Dismiss error', exact: true }).click()
   await expect(failureToast).not.toBeVisible()
   await navigation.getByRole('button', { name: 'Tunnels', exact: true }).click()
-  await page.locator('article').getByRole('button', { name: 'Diagnose connection', exact: true }).click()
+  await page.locator('article').getByRole('button', { name: 'Test connection', exact: true }).click()
   let probeDialog = page.getByRole('dialog', { name: 'Connection test', exact: true })
   await expect(probeDialog.getByText('Connection test passed', { exact: true })).toBeVisible()
   await expect(probeDialog.getByText('First-hop DNS', { exact: true })).toBeVisible()
@@ -645,6 +664,7 @@ try {
   throw error
 } finally {
   if (browser) await browser.close()
+  await cli('shutdown').catch(() => {})
   child.kill()
   sshFixture?.kill()
   for (const connection of echoConnections) connection.destroy()

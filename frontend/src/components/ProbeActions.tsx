@@ -44,7 +44,7 @@ export function ProbeActions({ jumpers, tunnel = null, disabled = false, iconOnl
     const result = await api.runProbe(id)
     if (sequence === generation.current) setReport(result)
   }
-  async function start(diagnostics: boolean) {
+  async function start() {
     if (starting.current) return
     starting.current = true
     cancellationRequested.current = false
@@ -52,7 +52,7 @@ export function ProbeActions({ jumpers, tunnel = null, disabled = false, iconOnl
     const sequence = ++generation.current
     setShow(true); setBusy(true); setReport(null); setError('')
     try {
-      const id = await api.beginProbe({ jumpers, tunnel, diagnostics })
+      const id = await api.beginProbe({ jumpers, tunnel, diagnostics: true })
       if (sequence !== generation.current) { await api.cancelProbe(id); return }
       token.current = id
       if (cancellationRequested.current) { await api.cancelProbe(id); setError(t('The test was cancelled.')); return }
@@ -78,10 +78,7 @@ export function ProbeActions({ jumpers, tunnel = null, disabled = false, iconOnl
     finally { if (sequence === generation.current) setBusy(false) }
   }
   return <>
-    <div className={iconOnly ? 'probe-actions' : 'actions'}>{iconOnly ? <>
-      <IconButton icon="test" label={t('Test connection')} disabled={disabled || busy} onClick={() => { void start(false) }} />
-      <IconButton icon="diagnose" label={t('Diagnose connection')} disabled={disabled || busy} onClick={() => { void start(true) }} />
-    </> : <><button type="button" disabled={disabled || busy} onClick={() => { void start(false) }}>{t('Test connection')}</button><button type="button" disabled={disabled || busy} onClick={() => { void start(true) }}>{t('Diagnose connection')}</button></>}</div>
+    <div className={iconOnly ? 'probe-actions' : 'actions'}>{iconOnly ? <IconButton icon="test" label={t('Test connection')} disabled={disabled || busy} onClick={() => { void start() }} /> : <button type="button" disabled={disabled || busy} onClick={() => { void start() }}>{t('Test connection')}</button>}</div>
     {show && <Modal title={t('Connection test')} closeLabel={t('Close test')} onClose={close}>
       <p className="notice">{t('Tests do not save drafts. Confirmed host keys are saved. Stop a running tunnel before testing its listening port.')}</p>
       {busy && <p role="status">{t('Testing connection...')}</p>}

@@ -25,20 +25,18 @@ test('clones every group member and excludes the existing first hop and later ho
   expect(screen.getByText('Database')).toBeTruthy()
   expect(screen.getByText('Cache')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Clone group' }))
-  await waitFor(() => expect(save).toHaveBeenCalledWith({ name: 'Services → Machine 2', tunnel_ids: [10, 11], target_jumper_id: 2 }))
+  await waitFor(() => expect(save).toHaveBeenCalledWith({ tunnel_ids: [10, 11], target_jumper_id: 2 }))
   expect(close).toHaveBeenCalledOnce()
   expect(source.tunnels[0].jumper_ids).toEqual([1, 3])
 })
 
-test('a failed atomic save keeps the dialog and edited name for retry', async () => {
+test('a failed atomic save keeps the dialog and selected target for retry', async () => {
   const save = vi.fn().mockRejectedValue(new Error('A source tunnel no longer exists'))
   const close = vi.fn()
   render(<GroupClone source={source} jumpers={jumpers} save={save} close={close} />)
-  fireEvent.change(screen.getByLabelText('Group name'), { target: { value: 'Deployment B' } })
   fireEvent.click(screen.getByRole('button', { name: 'Clone group' }))
   await screen.findByRole('alert')
   expect(close).not.toHaveBeenCalled()
-  expect((screen.getByLabelText('Group name') as HTMLInputElement).value).toBe('Deployment B')
   expect((screen.getByRole('button', { name: 'Clone group' }) as HTMLButtonElement).disabled).toBe(false)
 })
 
@@ -47,6 +45,6 @@ test('missing alternative machines cannot submit a clone', () => {
   render(<GroupClone source={source} jumpers={jumpers.filter(jumper => jumper.id !== 2)} save={save} close={() => {}} />)
   expect(screen.getByText('Add another jumper that does not already occur later in these chains.')).toBeTruthy()
   expect((screen.getByRole('button', { name: 'Clone group' }) as HTMLButtonElement).disabled).toBe(true)
-  fireEvent.submit(screen.getByLabelText('Group name').closest('form')!)
+  fireEvent.submit(screen.getByRole('combobox').closest('form')!)
   expect(save).not.toHaveBeenCalled()
 })

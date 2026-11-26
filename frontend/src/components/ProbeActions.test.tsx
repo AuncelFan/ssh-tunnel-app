@@ -23,7 +23,7 @@ afterEach(() => { cleanup(); vi.resetAllMocks() })
 test('diagnostics test the supplied draft and show measured latency', async () => {
   const jumper = newJumper()
   render(<ProbeActions jumpers={[jumper]} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Diagnose connection' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
   await screen.findByText('Connection test passed')
   expect(api.beginProbe).toHaveBeenCalledWith({ jumpers: [jumper], tunnel: null, diagnostics: true })
   expect(api.runProbe).toHaveBeenCalledWith(42)

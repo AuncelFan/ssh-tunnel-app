@@ -128,7 +128,7 @@ impl Default for Runtime {
                 journal: Default::default(),
                 states: Default::default(),
                 events,
-                generation: Default::default(),
+                generation: Arc::new(crate::generation_counter()),
             },
         }
     }

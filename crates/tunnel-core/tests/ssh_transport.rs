@@ -1499,14 +1499,14 @@ async fn changing_auto_start_and_cloning_do_not_interrupt_a_running_tunnel() {
     }
     let cloned = controller
         .clone_group(GroupClone {
-            name: "Clone".into(),
             tunnel_ids: vec![id],
             target_jumper_id: target,
         })
         .await
         .unwrap();
     let snapshot = controller.snapshot();
-    assert_eq!(snapshot.groups[0], cloned);
+    assert!(snapshot.groups.is_empty());
+    assert_eq!(cloned, vec![snapshot.tunnels[1].id]);
     assert_eq!(snapshot.tunnels[0].status, "running");
     assert_eq!(snapshot.tunnels[1].status, "stopped");
     assert_eq!(snapshot.tunnels[1].name, "Original");
